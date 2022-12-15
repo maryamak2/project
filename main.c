@@ -7,18 +7,17 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
-
 #include "Temp_control.h"
+#include "display.h"
+#include "EEPROM.h"
 #define set_bit(reg,bit) reg|=(1<<bit)
 #define clr_bit(reg,bit) reg&=~(1<<bit)
 #define tog_bit(reg,bit) reg^=(1<<bit)
 #define read_bit(reg,bit) reg&(1<<bit)
 #define is_bit_set(reg,bit) reg&(1<<bit)>>bit
 #define is_bit_clr(reg,bit) !(reg&(1<<bit)>>bit)
-#include "display.h"
-#include "EEPROM.h"
 #define NUM_OF_TEMP_MEASURES 10
-
+typedef unsigned char uint8 ;
 
 uint8 SetTemp = 60 ;
 uint8 end;
