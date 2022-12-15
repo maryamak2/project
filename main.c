@@ -1,124 +1,229 @@
-/*
- * main.c
- *
- *  Created on: Dec 7, 2022
- *      Author: Hazem
- */
-#include <avr/io.h>
-#include <avr/interrupt.h>
-#include <util/delay.h>
-#include "Temp_control.h"
-#include "display.h"
-#include "EEPROM.h"
-#define set_bit(reg,bit) reg|=(1<<bit)
-#define clr_bit(reg,bit) reg&=~(1<<bit)
-#define tog_bit(reg,bit) reg^=(1<<bit)
-#define read_bit(reg,bit) reg&(1<<bit)
-#define is_bit_set(reg,bit) reg&(1<<bit)>>bit
-#define is_bit_clr(reg,bit) !(reg&(1<<bit)>>bit)
-#define NUM_OF_TEMP_MEASURES 10
-typedef unsigned char uint8 ;
-
-uint8 SetTemp = 60 ;
-uint8 end;
-uint8 right ;
-uint8 left ;
-uint8 state;
-uint8 ovf;
-uint8 heat;
-uint8 CrrTemp;
-
-uint8 temp_arr[NUM_OF_TEMP_MEASURES];
-uint8 counter_timer0;
-uint8 counter_timer1 ;
-uint8 temp_measure_f;
-uint8 actual_temp;
-uint8 avg_temp;
-uint8 arr_counter;
-
-void button_up()
+#include <stdio.h>
+#include <stdlib.h>
+typedef unsigned char uint8;
+uint8 idsOfSubjects[3];
+uint8 gradesOfStud[3];
+uint8 ids[10];
+uint8 NofEntries=0;
+struct SimpleDb
 {
-	SREG |=(1<<7); // enable global interrupt
+  struct student_info
+    {
+        uint8 id;
+        uint8 year;
+    }student;
 
-								GICR |=(1<<6);   // enable module int 0
-								MCUCR |=(1<<1);      // " UP " button  status register set ( data sheet)
-								MCUCR &=(~(1<<0));   // " UP " button  status register set ( data sheet)
+    struct courses
+    {
+       uint8 id;
+      uint8 grade;
 
-								GICR |=(1<<7);   // enable module int 1
-								MCUCR |=(1<<3);      // " DOWN " button  status register set ( data sheet)
-								MCUCR &=(~(1<<2));   // " DOWN " button  status register set ( data sheet)
+    }course_1,course_2,course_3;
+}entry[10];
+
+_Bool SDB_IsFull(void)
+{
+   if(NofEntries==10)
+    return 1;
+   else
+    return 0;
+}
+
+uint8 SDB_GetUsedSize(void)
+{
+    return NofEntries;
+}
+
+_Bool SDB_AddEntry(uint8 id,uint8 years,uint8* subjects,uint8* grades)
+{
+    entry[NofEntries-1].student.id=ids;
+    //printf("\n%d:)here%d",entry[NofEntries-1].student.year,entry[NofEntries-1].student.id);
+    entry[NofEntries-1].student.year=years;
+    entry[NofEntries-1].course_1.id=*subjects;
+    entry[NofEntries-1].course_2.id=*(subjects+1);
+    entry[NofEntries-1].course_3.id=*(subjects+2);
+    if(((*grades)>=0)&&((*grades)<=100))
+    entry[NofEntries-1].course_1.grade=*grades;
+    else
+        return 0;
+    if((((grades+1))>=0)&&(((grades+1))<=100))
+    entry[NofEntries-1].course_2.grade=*(grades+1);
+    else
+        return 0;
+    if((((grades+2))>=0)&&(((grades+2))<=100))
+    entry[NofEntries-1].course_3.grade=*(grades+2);
+    else
+        return 0;
+    NofEntries++;
+    return 1;
 
 }
 
-void button_down()
-{
-
-	SREG |=(1<<7); // enable global interrupt
-
-	GICR |=(1<<7);   // enable module int 1
-	MCUCR |=(1<<3);      // " DOWN " button  status register set ( data sheet)
-	MCUCR &=(~(1<<2));   // " DOWN " button  status register set ( data sheet)
-
-	GICR |=(1<<6);   // enable module int 0
-	MCUCR |=(1<<1);      // " UP " button  status register set ( data sheet)
-	MCUCR &=(~(1<<0));   // " UP " button  status register set ( data sheet)
-
+void SDB_DeleteEntry(uint8 id)
+{int i;
+   for(i=0;i<10;i++)
+   {
+       if(entry[i].student.id==id)
+        break;
+   }
+   NofEntries--;
+   for(int j=i;j<NofEntries;j++)
+    entry[j]=entry[j+1];
+   //by this way we wont shift the data in last entry so it will be
+   //duplicated anyways it's ok because the NofEntries is shifted and
+   //pointing on the right one
 }
 
-
-int main ()
+_Bool SDB_ReadEntry(uint8 id,uint8* year,uint8* subjects,uint8* grades)
 {
-	initialize();
-	temp_ctrl_initialize();
-	EEPROM_write(0x0000,SetTemp);
+    int i;
+    for(i=0;i<10;i++)
+    {
+        if(entry[i].student.id==id)
+            break;
+    }
+    if(i==10)
+        return 0;
 
-	while(1)
-	{
+    year=&(entry[i].student.year);
+    idsOfSubjects[0]=entry[i].course_1.id;
+    gradesOfStud[0]=entry[i].course_1.grade;
+
+    idsOfSubjects[1]=entry[i].course_2.id;
+    gradesOfStud[1]=entry[i].course_2.grade;
+
+    idsOfSubjects[2]=entry[i].course_3.id;
+    gradesOfStud[2]=entry[i].course_3.grade;
+
+    subjects=idsOfSubjects;
+    grades=gradesOfStud;
+    return 1;
+}
+
+void SDB_GetIdList(uint8* count,uint8* list)
+{
+  for(int i=0;i<10;i++)
+  {
+      ids[i]=entry[i].student.id;
+  }
+  count=&NofEntries;
+  list=ids;
+}
+_Bool SDB_IsIdExsist(uint8 id)
+{
+    int i;
+    for(i=0;i<10;i++)
+    {
+        if(entry[i].student.id==id)
+            break;
+    }
+    if(i==10)
+        return 0;
+    else
+        return 1;
+
+}
+int main()
+{
+
+    uint8 id,year;
+    uint8* year$,subjects,grades,count,list;
+    int op,returned,test;
+    _Bool exit=0;
+    _Bool exitwhole=0;
+
+printf("WELCOME!");
+
+    while(!exit)
+    {
+     printf("\nENTER:\n1:To check id database is full\n2:Toget the number of entries in database\n3:To add new entry to the database\n");
+     printf("4:To delete entry with given ID\n5:To read an entry matching provided ID\n6:To get list of students' IDs\n7:To check if the provided student ID exsists\n");
+     printf("\nenter  0 to exit program \n");
+     scanf("%d",&op);
+     fflush(stdin);
+     if(op==0)
+        exit=1;
+
+    if(op==1)
+    {
+      returned=SDB_IsFull();
+      if(returned==1)
+      printf("database is full");
+      else
+        printf("database is not full");
+    }
+
+    if(op==2)
+    {
+      printf("the number of entries is %d",SDB_GetUsedSize());
+    }
+    if(op==3)
+     {
+
+        printf("enter the student ID\n");
+        scanf("%d",&id) ;
+        fflush(stdin);
+        printf("enter the year\n");
+        scanf("%d",&year);
+        printf("enter the subject ids\n");
+        scanf("%d%d%d",&idsOfSubjects[0],&idsOfSubjects[1],&idsOfSubjects[2]);
+        printf("enter the subject grades in same order\n");
+        scanf("%d%d%d",&gradesOfStud[0],&gradesOfStud[1],&gradesOfStud[2]);
+        returned=SDB_AddEntry(id,year,&idsOfSubjects[0],&gradesOfStud[0]);
+        if(returned==1)
+         printf("successfully added");
+        else
+         printf("not added :(");
+
+     }
+     if(op==4)
+     {
+      printf("enter the student ID to be deleted\n");
+      scanf("%d",&id) ;
+      SDB_DeleteEntry(id);
+     }
+     if(op==5)
+     {
+        printf("enter the student ID\n");
+        scanf("%d",&id) ;
+        returned=SDB_ReadEntry(id,&year$,subjects,grades);
+         if(returned==0)
+            printf("entry doesn't exsist\n ");
+         else
+            {
+                printf("student's year:%d\n",*year$);
+                printf("course_1 id:%d\ncourse_1 grade:%d\n",(subjects+0),(grades+0));
+               printf("course_2 id:%d\ncourse_2 grade:%d\n",(subjects+1),(grades+1));
+               printf("course_3 id:%d\ncourse_3 grade:%d\n",(subjects+2),(grades+2));
+
+            }
+     }
+      /*if(op==6)
+        {
+          SDB_GetIdList(&count,&list);
+          uint8 maxn=*count;
+          for(int i=0;i<maxn;i++)
+            printf("Student # %d's id is:\n",*(list+i));
+
+
+        }*/
 
 
 
-		if (PINB && (1<<2)) //check for on/off button state
-		{
-			state =1;
-			SREG |=(1<<7); // enable global interrupt
-			GICR |=(1<<5);   // enable module int 2
-			MCUCSR &=(~(1<<6)); // " on/off " button  status register set ( data sheet)
-
-			SetTemp = EEPROM_read(0x0000); // read set temp from eeprom
-
-			while (state)
-			{
-
-				if (PIND && (1<<2)) //check for up button state
-						{ while( PIND && (1<<2) ) ; // waiting button to be released
-
-						    button_up();
-							TempSetMod(&SetTemp); // function to enter temperature setting mode
-						}
+    if(op==7)
+    {
+         printf("enter the student IDto search for:\n");
+        scanf("%d",&id) ;
+       returned= SDB_IsIdExsist(id);
+       if(returned ==0)
+        printf("this id doesn't exsist");
+       else if(returned ==1)
+        printf("this id  exsists");
+    }
+    if(op<0 || op >7)
+        printf("enter valid operation!\n");
+    }
 
 
-
-						if (PIND && (1<<3)) //check for down button state
-						{while( PIND && (1<<3) ) {} // waiting button to be released
-
-						     button_down();
-							TempSetMod(&SetTemp); // function to enter temperature setting mode*/
-						}
-
-						CrrTemp=avg_temp;// function to read registered temperature
-						 disp(CrrTemp); //display current temp value
-
-						Operation();// function to compare sensor temp with set temp & decide state
-
-			}
-
-			EEPROM_write(0x0000,SetTemp); 	// send set temp value to EEPROM
-			closed(); // function to shut the system condition
-		}
-
-	}
-
-
-
-	return 0;
-	}
+    return 0;
+}
